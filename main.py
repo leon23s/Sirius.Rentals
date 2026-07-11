@@ -39,7 +39,7 @@ def rooms():
         db_sess.commit()
         db_sess.close()
 
-        return jsonify([{'msg': 'комната успешно добавлена'}]), 200
+        return jsonify({'msg': 'комната успешно добавлена'}), 200
 
     if request.method == 'GET':
         rooms_list = db_sess.query(Rooms).all()
@@ -53,15 +53,16 @@ def rooms():
         db_sess.close()
         return jsonify(result), 200
 
-@app.route('/rooms/<int:id>', methods=['GET', 'PUT'])
+@app.route('/rooms/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 @jwt_required()
 def room_id(id):
     db_sess = db_session.create_session()
     room = db_sess.query(Rooms).filter(Rooms.id == id).first()
+    if not room:
+        db_sess.close()
+        return jsonify({'msg': 'комната не найдена'}), 404
+
     if request.method == 'GET':
-        if not room:
-            db_sess.close()
-            return jsonify([{'msg': 'комната не найдена'}]), 404
 
         result = [{'id': room.id,
                    'title': room.title,
@@ -89,12 +90,23 @@ def room_id(id):
                 room.capacity = data['capacity']
             else:
                 db_sess.close()
-                return jsonify([{'msg': 'некорректная вместимость комнаты'}]), 400
+                return jsonify({'msg': 'некорректная вместимость комнаты'}), 400
 
         if 'equipment' in data:
+            room.equipment = data['equipment']
 
+        db_sess.commit()
+        db_sess.close()
+        return jsonify({'msg': 'комната успешно изменена'}), 200
 
+    if request.method == 'DELETE':
+        if room.user_id != get_jwt_identity():
+            db_sess.close()
+            return jsonify({'msg': 'недостаточно прав для редактирования'}), 403
 
+        db_sess.delete(room)
+        db_sess.commit()
+        db_sess.close()
 
 @app.route('/register', methods=['POST'])
 def register():
