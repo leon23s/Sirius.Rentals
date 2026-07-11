@@ -5,6 +5,7 @@ import datetime
 
 from data.rooms import Rooms
 from data.users import User
+from data.bookings import Bookings
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'Sirius-Rentals-Key'
@@ -71,11 +72,13 @@ def room_id(id):
                    'user_id': room.user_id,
                    'booking': room.booking,
                    'created_date': room.created_date}]
+        db_sess.close()
         return jsonify(result), 200
 
     if request.method == 'PUT':
         data = request.get_json()
         if not data:
+            db_sess.close()
             return jsonify({'msg': 'отсутствуют данные'}), 400
 
         if room.user_id != get_jwt_identity():
@@ -107,6 +110,43 @@ def room_id(id):
         db_sess.delete(room)
         db_sess.commit()
         db_sess.close()
+
+@app.route('/bookings', methods=['POST', 'DELETE'])
+@jwt_required()
+def bookings():
+    db_sess = db_session.create_session()
+    if request.method == 'POST':
+        data = request.get_json()
+        if not data:
+            db_sess.close()
+            return jsonify({'msg': 'отсутствуют данные'}), 400
+
+        for f in ['room_id', 'date_start', 'date_end']:
+            if f not in data:
+                db_sess.close()
+                return jsonify({'msg': f'отсутствует поле {f}'}), 400
+
+        if db_sess.query(Rooms).filter(Rooms.id == data['room_id']).first() is None:
+            db_sess.close()
+            return jsonify({'msg': 'указанная комната не найдена'}), 404
+
+        user_id = get_jwt_identity()
+        user = db_sess.query(User).filter(User.id == user_id).first()
+        username = user.name
+
+        booking = Bookings()
+        booking.room_id = data['room_id']
+        booking.date_start = data['date_start']
+        booking.date_end = data['date_end']
+        booking.username = username
+        booking.status = 'active'
+
+        db_sess.add(booking)
+        db_sess.commit()
+        db_sess.close()
+
+        return jsonify({'msg': 'комната успешно забронирована'}), 200
+
 
 @app.route('/register', methods=['POST'])
 def register():
