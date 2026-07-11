@@ -2,20 +2,99 @@ from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from data import db_session
 import datetime
+
+from data.rooms import Rooms
 from data.users import User
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'Sirius-Rentals-Key'
 app.config['JWT_SECRET_KEY'] = 'Sirius-Rentals-JWT-Key'
-app.config['JWT_LIFE'] = datetime.timedelta(hours=1)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)
 
 jwt = JWTManager(app)
 
 
 @app.route('/rooms', methods=['POST', 'GET'])
+@jwt_required()
 def rooms():
+    db_sess = db_session.create_session()
     if request.method == 'POST':
-        pass
+        data = request.get_json()
+        if not data:
+            db_sess.close()
+            return jsonify({'msg': 'отсутствуют данные'}), 400
+
+        for f in ['title', 'capacity', 'equipment']:
+            if f not in data:
+                db_sess.close()
+                return jsonify({'msg': f'отсутствует поле {f}'}), 400
+
+        room = Rooms()
+        room.title = data['title']
+        room.capacity = data['capacity']
+        room.equipment = data['equipment']
+        room.user_id = get_jwt_identity()
+
+        db_sess.add(room)
+        db_sess.commit()
+        db_sess.close()
+
+        return jsonify([{'msg': 'комната успешно добавлена'}]), 200
+
+    if request.method == 'GET':
+        rooms_list = db_sess.query(Rooms).all()
+        result = [{
+            'id': r.id,
+            'title': r.title,
+            'capacity': r.capacity,
+            'equipment': r.equipment,
+            'user_id': r.user_id
+        } for r in rooms_list]
+        db_sess.close()
+        return jsonify(result), 200
+
+@app.route('/rooms/<int:id>', methods=['GET', 'PUT'])
+@jwt_required()
+def room_id(id):
+    db_sess = db_session.create_session()
+    room = db_sess.query(Rooms).filter(Rooms.id == id).first()
+    if request.method == 'GET':
+        if not room:
+            db_sess.close()
+            return jsonify([{'msg': 'комната не найдена'}]), 404
+
+        result = [{'id': room.id,
+                   'title': room.title,
+                   'capacity': room.capacity,
+                   'equipment': room.equipment,
+                   'user_id': room.user_id,
+                   'booking': room.booking,
+                   'created_date': room.created_date}]
+        return jsonify(result), 200
+
+    if request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'msg': 'отсутствуют данные'}), 400
+
+        if room.user_id != get_jwt_identity():
+            db_sess.close()
+            return jsonify({'msg': 'недостаточно прав для редактирования'}), 403
+
+        if 'title' in data:
+            room.title = data['title']
+
+        if 'capacity' in data:
+            if type(data['capacity']) == int and data['capacity'] > 0:
+                room.capacity = data['capacity']
+            else:
+                db_sess.close()
+                return jsonify([{'msg': 'некорректная вместимость комнаты'}]), 400
+
+        if 'equipment' in data:
+
+
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -59,8 +138,8 @@ def login():
         return jsonify({'msg': 'неверный email или пароль'}), 401
 
     token = create_access_token(identity=user.id)
+    db_sess.close()
     return jsonify({'access_token': token}), 200
-
 
 
 def main():
