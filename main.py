@@ -30,13 +30,17 @@ def rooms():
                 db_sess.close()
                 return jsonify({'msg': f'отсутствует поле {f}'}), 400
 
-        if not isinstance(data.get('capacity'), int) or data['capacity'] <= 0:
+        if not isinstance(data['capacity'], int) or data['capacity'] <= 0:
             db_sess.close()
             return jsonify({'msg': 'указанная вместимость некорректна'}), 400
 
-        if not isinstance(data.get('equipment'), list):
+        if not isinstance(data['equipment'], list):
             db_sess.close()
             return jsonify({'msg': 'указанное оборудование некорректно'}), 400
+
+        if data['title'].strip() == '':
+            db_sess.close()
+            return jsonify({'msg': 'отсутствует название'}), 400
 
         room = Rooms()
         room.title = data['title']
@@ -52,7 +56,7 @@ def rooms():
 
     if request.method == 'GET':
         rooms_l = db_sess.query(Rooms).all()
-        capacity = request.args.get('capacity')
+        capacity = request.args['capacity']
         if capacity:
             try:
                 min_cap = int(capacity)
@@ -64,7 +68,8 @@ def rooms():
         equipment = request.args.get('equipment')
         if equipment:
             required = [e.strip() for e in equipment.split(',') if e.strip()]
-            rooms_l = [r for r in rooms_l if any(eq in r.equipment for eq in required)]
+            if required:
+                rooms_l = [r for r in rooms_l if any(eq in r.equipment for eq in required)]
 
         result = [{
             'id': r.id,
@@ -146,6 +151,64 @@ def room(id):
         return jsonify({'msg': 'комната успешно удалена'}), 200
 
 
+@app.route('/rooms/available')
+def available():
+    db_sess = db_session.create_session()
+    start_s = request.args['start']
+    end_s = request.args['end']
+    capacity_s = request.args['capacity']
+
+    if not start_s or not end_s:
+        db_sess.close()
+        return jsonify({'msg': 'start или end не указаны'}), 400
+
+    try:
+        start = datetime.fromisoformat(start_s)
+        end = datetime.fromisoformat(end_s)
+    except Exception:
+        db_sess.close()
+        return jsonify({'msg': 'неверный формат даты. требуется iso формат'}), 400
+
+    if start >= end:
+        db_sess.close()
+        return jsonify({'msg': 'указанный диапазон некорректен'}), 400
+
+    rooms = db_sess.query(Rooms).all()
+
+    if capacity_s:
+        try:
+            min_capacity = int(capacity_s)
+            if min_capacity <= 0:
+                db_sess.close()
+                return jsonify({'msg': 'capacity должно быть положительным числом'}), 400
+            rooms = [r for r in rooms if r.capacity >= min_capacity]
+
+        except Exception:
+            db_sess.close()
+            return jsonify({'msg': 'некорректные данные'}), 400
+
+    available = []
+    for room in rooms:
+        c = False
+
+        for booking in room.bookings:
+            if booking.status == 'active' and booking.date_start < end and booking.date_end > start:
+                c = True
+                break
+
+        if not c:
+            available.append({
+                'id': room.id,
+                'title': room.title,
+                'capacity': room.capacity,
+                'equipment': room.equipment,
+                'user_id': room.user_id
+            })
+
+    db_sess.close()
+    return jsonify(available), 200
+
+
 @app.route('/rooms/<int:id>/bookings', methods=['GET'])
 def bookings_date(id):
     db_sess = db_session.create_session()
@@ -154,7 +217,7 @@ def bookings_date(id):
         db_sess.close()
         return jsonify({'msg': 'комната не найдена'}), 404
 
-    date_str = request.args.get('date')
+    date_str = request.args['date']
     if not date_str:
         db_sess.close()
         return jsonify({'msg': 'не указана дата'}), 400
@@ -280,6 +343,7 @@ def register():
 
     db_sess = db_session.create_session()
     if db_sess.query(User).filter(User.email == data['email']).first():
+        db_sess.close()
         return jsonify({'msg': 'пользователь с этим email уже зарегистрирован'}), 409
 
     user = User()
