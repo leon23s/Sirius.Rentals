@@ -51,14 +51,28 @@ def rooms():
         return jsonify({'msg': 'комната успешно добавлена'}), 201
 
     if request.method == 'GET':
-        rooms_list = db_sess.query(Rooms).all()
+        rooms_l = db_sess.query(Rooms).all()
+        capacity = request.args.get('capacity')
+        if capacity:
+            try:
+                min_cap = int(capacity)
+                rooms_l = [r for r in rooms_l if r.capacity >= min_cap]
+            except Exception:
+                db_sess.close()
+                return jsonify({'msg': 'неверный формат. правильный формат: ?capacity={int}'}), 400
+
+        equipment = request.args.get('equipment')
+        if equipment:
+            required = [e.strip() for e in equipment.split(',') if e.strip()]
+            rooms_l = [r for r in rooms_l if any(eq in r.equipment for eq in required)]
+
         result = [{
             'id': r.id,
             'title': r.title,
             'capacity': r.capacity,
             'equipment': r.equipment,
             'user_id': r.user_id
-        } for r in rooms_list]
+        } for r in rooms_l]
         db_sess.close()
         return jsonify(result), 200
 
