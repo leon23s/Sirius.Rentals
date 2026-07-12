@@ -56,7 +56,7 @@ def rooms():
 
     if request.method == 'GET':
         rooms_l = db_sess.query(Rooms).all()
-        capacity = request.args['capacity']
+        capacity = request.args.get('capacity')
         if capacity:
             try:
                 min_cap = int(capacity)
@@ -316,7 +316,7 @@ def bookings_id(id):
     booking = db_sess.query(Bookings).filter(Bookings.id == id).first()
     if not booking:
         db_sess.close()
-        return jsonify({'msg': 'некорректный id'}), 404
+        return jsonify({'msg': 'бронирование не найдено'}), 404
 
     if booking.user_id != get_jwt_identity():
         db_sess.close()
@@ -372,9 +372,14 @@ def login():
         db_sess.close()
         return jsonify({'msg': 'неверный email или пароль'}), 401
 
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     db_sess.close()
     return jsonify({'access_token': token}), 200
+
+
+@app.route('/', methods=['GET'])
+def index():
+    pass
 
 
 def main():
