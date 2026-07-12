@@ -78,7 +78,7 @@ def room(id):
                    'capacity': room.capacity,
                    'equipment': room.equipment,
                    'user_id': room.user_id,
-                   'booking': [{'id': b.id,
+                   'bookings': [{'id': b.id,
                                 'date_start': b.date_start.isoformat(),
                                 'date_end': b.date_end.isoformat(),
                                 'username': b.username, 'status': b.status
@@ -131,6 +131,43 @@ def room(id):
         db_sess.close()
         return jsonify({'msg': 'комната успешно удалена'}), 200
 
+
+@app.route('/rooms/<int:id>/bookings', methods=['GET'])
+def bookings_date(id):
+    db_sess = db_session.create_session()
+    room = db_sess.query(Rooms).filter(Rooms.id == id).first()
+    if not room:
+        db_sess.close()
+        return jsonify({'msg': 'комната не найдена'}), 404
+
+    date_str = request.args.get('date')
+    if not date_str:
+        db_sess.close()
+        return jsonify({'msg': 'не указана дата'}), 400
+
+    try:
+        target_date = datetime.fromisoformat(date_str)
+        day_start = target_date.replace(hour=0, minute=0, second=0)
+        day_end = target_date.replace(hour=23, minute=59, second=59)
+    except Exception:
+        db_sess.close()
+        return jsonify({'msg': 'неверный формат даты'}), 400
+
+    bookings = db_sess.query(Bookings).filter(Bookings.room_id == id,
+                                              Bookings.date_start <= day_end,
+                                              Bookings.date_end >= day_start).all()
+
+    result = [{
+        'id': b.id,
+        'date_start': b.date_start.isoformat(),
+        'date_end': b.date_end.isoformat(),
+        'username': b.username,
+        'status': b.status
+    } for b in bookings]
+
+    db_sess.close()
+    return jsonify(result), 200
+
 @app.route('/bookings', methods=['POST'])
 @jwt_required()
 def bookings():
@@ -149,11 +186,16 @@ def bookings():
         db_sess.close()
         return jsonify({'msg': 'указанная комната не найдена'}), 404
 
-    date_start = datetime.fromisoformat(data['date_start'])
-    date_end = datetime.fromisoformat(data['date_end'])
+    try:
+        date_start = datetime.fromisoformat(data['date_start'])
+        date_end = datetime.fromisoformat(data['date_end'])
+    except Exception as e:
+        db_sess.close()
+        return jsonify({'msg': 'некорректный формат времени'}), 400
+
     if date_start >= date_end:
         db_sess.close()
-        return jsonify({'msg': 'указанное время некорректно'}), 400
+        return jsonify({'msg': 'указанный промежуток времени некорректен'}), 400
 
     all_bookings = db_sess.query(Bookings).filter(
         Bookings.room == room,
@@ -194,7 +236,20 @@ def bookings():
 @jwt_required()
 def bookings_id(id):
     db_sess = db_session.create_session()
+    booking = db_sess.query(Bookings).filter(Bookings.id == id).first()
+    if not booking:
+        db_sess.close()
+        return jsonify({'msg': 'некорректный id'}), 404
 
+    if booking.user_id != get_jwt_identity():
+        db_sess.close()
+        return jsonify({'msg': 'недостаточно прав'}), 403
+
+    booking.status = 'cancelled'
+    db_sess.commit()
+    db_sess.close()
+
+    return jsonify({'msg': 'бронирование успешно отменено'}), 200
 
 
 @app.route('/register', methods=['POST'])
