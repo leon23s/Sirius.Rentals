@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from data import db_session
+from datetime import datetime
 import datetime
 
 from data.rooms import Rooms
@@ -56,7 +57,7 @@ def rooms():
 
 @app.route('/rooms/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 @jwt_required()
-def room_id(id):
+def room(id):
     db_sess = db_session.create_session()
     room = db_sess.query(Rooms).filter(Rooms.id == id).first()
     if not room:
@@ -70,7 +71,13 @@ def room_id(id):
                    'capacity': room.capacity,
                    'equipment': room.equipment,
                    'user_id': room.user_id,
-                   'booking': room.booking,
+                   'booking': [{
+                       'id': b.id,
+                       'date_start': b.date_start.isoformat(),
+                       'date_end': b.date_end.isoformat(),
+                       'username': b.username,
+                       'status': b.status
+                   } for b in room.booking],
                    'created_date': room.created_date}]
         db_sess.close()
         return jsonify(result), 200
@@ -111,41 +118,55 @@ def room_id(id):
         db_sess.commit()
         db_sess.close()
 
-@app.route('/bookings', methods=['POST', 'DELETE'])
+@app.route('/bookings', methods=['POST'])
 @jwt_required()
 def bookings():
     db_sess = db_session.create_session()
-    if request.method == 'POST':
-        data = request.get_json()
-        if not data:
-            db_sess.close()
-            return jsonify({'msg': 'отсутствуют данные'}), 400
-
-        for f in ['room_id', 'date_start', 'date_end']:
-            if f not in data:
-                db_sess.close()
-                return jsonify({'msg': f'отсутствует поле {f}'}), 400
-
-        if db_sess.query(Rooms).filter(Rooms.id == data['room_id']).first() is None:
-            db_sess.close()
-            return jsonify({'msg': 'указанная комната не найдена'}), 404
-
-        user_id = get_jwt_identity()
-        user = db_sess.query(User).filter(User.id == user_id).first()
-        username = user.name
-
-        booking = Bookings()
-        booking.room_id = data['room_id']
-        booking.date_start = data['date_start']
-        booking.date_end = data['date_end']
-        booking.username = username
-        booking.status = 'active'
-
-        db_sess.add(booking)
-        db_sess.commit()
+    data = request.get_json()
+    if not data:
         db_sess.close()
+        return jsonify({'msg': 'отсутствуют данные'}), 400
 
-        return jsonify({'msg': 'комната успешно забронирована'}), 200
+    for f in ['room_id', 'date_start', 'date_end']:
+        if f not in data:
+            db_sess.close()
+            return jsonify({'msg': f'отсутствует поле {f}'}), 400
+    room = db_sess.query(Rooms).filter(Rooms.id == data['room_id']).first()
+    if room is None:
+        db_sess.close()
+        return jsonify({'msg': 'указанная комната не найдена'}), 404
+
+    room_booking = room.booking
+    if room_booking != []:
+        for booking in room_booking:
+            date_start = datetime.fromisoformat(booking.date_start)
+            date_end = datetime.fromisoformat(booking.date_end)
+            if not (booking.date_end <= date_start or booking.date_start >= date_end):
+                db_sess.close()
+                return jsonify({'msg': 'комната в это время занята'}), 409
+
+    user_id = get_jwt_identity()
+    user = db_sess.query(User).filter(User.id == user_id).first()
+    username = user.name
+
+    booking = Bookings()
+    booking.room_id = room.id
+    booking.date_start = data['date_start']
+    booking.date_end = data['date_end']
+    booking.username = username
+    booking.status = 'active'
+
+    db_sess.add(booking)
+    db_sess.commit()
+    db_sess.close()
+
+    return jsonify({'msg': f'комната успешно забронирована. Название: {room.title}, id комнаты: {room.id}'}), 200
+
+
+@app.route('/bookings/<int:id>', methods=['DELETE'])
+@jwt_required()
+def bookings(id):
+    pass
 
 
 @app.route('/register', methods=['POST'])
@@ -187,6 +208,7 @@ def login():
     user = db_sess.query(User).filter(User.email == data['email']).first()
 
     if not user or not user.check_password(data['password']):
+        db_sess.close()
         return jsonify({'msg': 'неверный email или пароль'}), 401
 
     token = create_access_token(identity=user.id)
