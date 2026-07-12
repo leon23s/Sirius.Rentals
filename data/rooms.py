@@ -10,5 +10,9 @@ class Rooms(SqlAlchemyBase):
     capacity = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)
     equipment = sqlalchemy.Column(sqlalchemy.JSON, default=[])
     user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"))
-    booking = sqlalchemy.Column(sqlalchemy.JSON, default=[])
+    bookings = sqlalchemy.orm.relationship(
+        'Bookings',
+        back_populates='room',
+        cascade='all, delete-orphan'
+    )
     created_date = sqlalchemy.Column(sqlalchemy.DateTime, default=datetime.datetime.now)

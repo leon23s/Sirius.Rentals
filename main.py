@@ -1,8 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from data import db_session
-from datetime import datetime
-import datetime
+from datetime import datetime, timedelta
 
 from data.rooms import Rooms
 from data.users import User
@@ -11,7 +10,7 @@ from data.bookings import Bookings
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'Sirius-Rentals-Key'
 app.config['JWT_SECRET_KEY'] = 'Sirius-Rentals-JWT-Key'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 
 jwt = JWTManager(app)
 
@@ -31,6 +30,14 @@ def rooms():
                 db_sess.close()
                 return jsonify({'msg': f'отсутствует поле {f}'}), 400
 
+        if not isinstance(data.get('capacity'), int) or data['capacity'] <= 0:
+            db_sess.close()
+            return jsonify({'msg': 'указанная вместимость некорректна'}), 400
+
+        if not isinstance(data.get('equipment'), list):
+            db_sess.close()
+            return jsonify({'msg': 'указанное оборудование некорректно'}), 400
+
         room = Rooms()
         room.title = data['title']
         room.capacity = data['capacity']
@@ -41,7 +48,7 @@ def rooms():
         db_sess.commit()
         db_sess.close()
 
-        return jsonify({'msg': 'комната успешно добавлена'}), 200
+        return jsonify({'msg': 'комната успешно добавлена'}), 201
 
     if request.method == 'GET':
         rooms_list = db_sess.query(Rooms).all()
@@ -66,19 +73,17 @@ def room(id):
 
     if request.method == 'GET':
 
-        result = [{'id': room.id,
+        result = {'id': room.id,
                    'title': room.title,
                    'capacity': room.capacity,
                    'equipment': room.equipment,
                    'user_id': room.user_id,
-                   'booking': [{
-                       'id': b.id,
-                       'date_start': b.date_start.isoformat(),
-                       'date_end': b.date_end.isoformat(),
-                       'username': b.username,
-                       'status': b.status
-                   } for b in room.booking],
-                   'created_date': room.created_date}]
+                   'booking': [{'id': b.id,
+                                'date_start': b.date_start.isoformat(),
+                                'date_end': b.date_end.isoformat(),
+                                'username': b.username, 'status': b.status
+                                } for b in room.bookings if b.status == 'active'],
+                   'created_date': room.created_date.isoformat()}
         db_sess.close()
         return jsonify(result), 200
 
@@ -96,13 +101,15 @@ def room(id):
             room.title = data['title']
 
         if 'capacity' in data:
-            if type(data['capacity']) == int and data['capacity'] > 0:
+            if isinstance(data['capacity'], int) and data['capacity'] > 0:
                 room.capacity = data['capacity']
             else:
                 db_sess.close()
                 return jsonify({'msg': 'некорректная вместимость комнаты'}), 400
 
         if 'equipment' in data:
+            if not isinstance(data['equipment'], list):
+                return jsonify({'msg': 'оборудование должно быть списком'}), 400
             room.equipment = data['equipment']
 
         db_sess.commit()
@@ -112,11 +119,17 @@ def room(id):
     if request.method == 'DELETE':
         if room.user_id != get_jwt_identity():
             db_sess.close()
-            return jsonify({'msg': 'недостаточно прав для редактирования'}), 403
+            return jsonify({'msg': 'недостаточно прав'}), 403
+
+        active_bookings = [b for b in room.bookings if b.status == 'active']
+        if active_bookings:
+            db_sess.close()
+            return jsonify({'msg': 'нельзя удалить комнату с активными бронированиями'}), 409
 
         db_sess.delete(room)
         db_sess.commit()
         db_sess.close()
+        return jsonify({'msg': 'комната успешно удалена'}), 200
 
 @app.route('/bookings', methods=['POST'])
 @jwt_required()
@@ -136,37 +149,52 @@ def bookings():
         db_sess.close()
         return jsonify({'msg': 'указанная комната не найдена'}), 404
 
-    room_booking = room.booking
-    if room_booking != []:
-        for booking in room_booking:
-            date_start = datetime.fromisoformat(booking.date_start)
-            date_end = datetime.fromisoformat(booking.date_end)
-            if not (booking.date_end <= date_start or booking.date_start >= date_end):
-                db_sess.close()
-                return jsonify({'msg': 'комната в это время занята'}), 409
+    date_start = datetime.fromisoformat(data['date_start'])
+    date_end = datetime.fromisoformat(data['date_end'])
+    if date_start >= date_end:
+        db_sess.close()
+        return jsonify({'msg': 'указанное время некорректно'}), 400
+
+    all_bookings = db_sess.query(Bookings).filter(
+        Bookings.room == room,
+        Bookings.status == 'active'
+    ).all()
+
+    for b in all_bookings:
+        if not (b.date_end <= date_start or b.date_start >= date_end):
+            db_sess.close()
+            return jsonify({'msg': 'комната в это время занята'}), 409
+
+    if date_start < datetime.now():
+        db_sess.close()
+        return jsonify({'msg': 'нельзя бронировать прошедшее время'}), 400
 
     user_id = get_jwt_identity()
     user = db_sess.query(User).filter(User.id == user_id).first()
     username = user.name
 
     booking = Bookings()
-    booking.room_id = room.id
-    booking.date_start = data['date_start']
-    booking.date_end = data['date_end']
-    booking.username = username
+    booking.date_start = date_start
+    booking.date_end = date_end
     booking.status = 'active'
+    booking.room = room
+    booking.user = user
+    booking.username = username
 
     db_sess.add(booking)
+    db_sess.flush()
+
     db_sess.commit()
     db_sess.close()
 
-    return jsonify({'msg': f'комната успешно забронирована. Название: {room.title}, id комнаты: {room.id}'}), 200
+    return jsonify({'msg': f'комната успешно забронирована. Название: {room.title}, id комнаты: {room.id}'}), 201
 
 
 @app.route('/bookings/<int:id>', methods=['DELETE'])
 @jwt_required()
-def bookings(id):
-    pass
+def bookings_id(id):
+    db_sess = db_session.create_session()
+
 
 
 @app.route('/register', methods=['POST'])
