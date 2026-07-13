@@ -1,8 +1,10 @@
-from flask import Flask, jsonify, request
+import flask
+from flask import Flask, jsonify, request, render_template, redirect
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from data import db_session
 from datetime import datetime, timedelta
 
+from data.register_form import RegisterForm
 from data.rooms import Rooms
 from data.users import User
 from data.bookings import Bookings
@@ -379,7 +381,37 @@ def login():
 
 @app.route('/', methods=['GET'])
 def index():
-    pass
+
+    return render_template('index.html')
+
+@app.route('/web/register', methods=['POST', 'GET'])
+def web_register():
+    form = RegisterForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        try:
+            if db_sess.query(User).filter(User.email == form.email.data).first():
+                flask.flash('Пользователь с такой почтой уже существует', 'danger')
+                return render_template('register.html', form=form, message_flashed=True)
+
+            if form.password.data != form.password_again.data:
+                flask.flash('Пароли не совпадают', 'danger')
+                return render_template('register.html', form=form, message_flashed=True)
+
+            user = User(
+                email=form.email.data,
+                name=form.name.data
+            )
+            user.set_password(form.password.data)
+
+            db_sess.add(user)
+            db_sess.commit()
+
+            flask.flash('Регистрация прошла успешно', 'success')
+            return redirect('/web/login')
+        finally:
+            db_sess.close()
+    return render_template('register.html', form=form, message_flashed=True)
 
 
 def main():
