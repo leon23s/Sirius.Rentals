@@ -481,7 +481,6 @@ def web_booking():
             flash('Нельзя бронировать прошедшее время', 'danger')
             return render_template('booking.html', form=form)
 
-        db_sess = db_session.create_session()
         room = db_sess.query(Rooms).filter(Rooms.id == room_id).first()
         if not room:
             db_sess.close()
