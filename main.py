@@ -444,10 +444,62 @@ def web_booking():
         return redirect('/web/login')
 
     form = BookingForm()
-    pass
 
-    return render_template('booking.html')
+    db_sess = db_session.create_session()
+    rooms = db_sess.query(Rooms).all()
+    form.room_id.choices = [(r.id, f"{r.title} (вместимость: {r.capacity})") for r in rooms]
 
+    if form.validate_on_submit():
+        room_id = form.room_id.data
+        date_start = datetime.fromisoformat(form.date_start.data)
+        date_end = datetime.fromisoformat(form.date_end.data)
+
+        user = db_sess.query(User).filter(User.id == session['user_id']).first()
+        if not user:
+            db_sess.close()
+            flash('Пользователь не найден', 'danger')
+            return render_template('booking.html', form=form)
+
+        if date_start >= date_end:
+            db_sess.close()
+            flash('Время начала должно быть раньше окончания', 'danger')
+            return render_template('booking.html', form=form)
+
+        if date_start < datetime.now():
+            db_sess.close()
+            flash('Нельзя бронировать прошедшее время', 'danger')
+            return render_template('booking.html', form=form)
+
+        db_sess = db_session.create_session()
+        room = db_sess.query(Rooms).filter(Rooms.id == room_id).first()
+        if not room:
+            db_sess.close()
+            flash('Комната не найдена', 'danger')
+            return render_template('booking.html', form=form)
+
+        for booking in room.bookings:
+            if booking.status == 'active':
+                if not (booking.date_end <= date_start or booking.date_start >= date_end):
+                    db_sess.close()
+                    flash('Комната уже занята в это время', 'danger')
+                    return render_template('booking.html', form=form)
+
+        booking = Bookings()
+        booking.room = room
+        booking.user = user
+        booking.date_start = date_start
+        booking.date_end = date_end
+        booking.username = user.name
+        booking.status = 'active'
+
+        db_sess.add(booking)
+        db_sess.commit()
+        db_sess.close()
+
+        flash(f'Комната {room.title} успешно забронирована', 'success')
+        return redirect('/')
+
+    return render_template('booking.html', form=form)
 
 def main():
     db_session.global_init("db/Rental.db")
