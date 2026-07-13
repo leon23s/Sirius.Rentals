@@ -537,16 +537,17 @@ def web_room():
             return render_template('add_room.html', form=form, current_user=user)
 
         room = Rooms()
-        room.title = form.title.data
+        room_title = form.title.data
+        room.title = room_title
         room.capacity = form.capacity.data
         room.equipment = equipment_list
         room.user_id = user.id
 
         db_sess.add(room)
         db_sess.commit()
-
-        flash(f'Комната {room.title} успешно добавлена', 'success')
         db_sess.close()
+
+        flash(f'Комната {room_title} успешно добавлена', 'success')
         return redirect('/')
 
     user = None
@@ -570,10 +571,19 @@ def profile():
         flash('Пользователь не найден', 'danger')
         return redirect('/')
 
+    bookings_data = []
     bookings = db_sess.query(Bookings).filter(Bookings.user_id == user.id, Bookings.status == 'active').all()
+    for b in bookings:
+        bookings_data.append({
+            'id': b.id,
+            'room_title': b.room.title,
+            'date_start': b.date_start,
+            'date_end': b.date_end,
+            'status': b.status
+        })
     db_sess.close()
 
-    return render_template('profile.html', user=user, bookings=bookings)
+    return render_template('profile.html', user=user, bookings=bookings_data)
 
 
 
