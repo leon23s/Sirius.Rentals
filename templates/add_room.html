@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Добавить комнату</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.title.label(class="form-label") }}
+        {{ form.title(class="form-control") }}
+    </div>
+    <div class="mb-3">
+        {{ form.capacity.label(class="form-label") }}
+        {{ form.capacity(class="form-control") }}
+    </div>
+    <div class="mb-3">
+        {{ form.equipment.label(class="form-label") }}
+        {{ form.equipment(class="form-control") }}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}

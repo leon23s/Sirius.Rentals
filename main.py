@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from data.booking_form import BookingForm
 from data.login_form import LoginForm
 from data.register_form import RegisterForm
+from data.room_form import RoomForm
 from data.rooms import Rooms
 from data.users import User
 from data.bookings import Bookings
@@ -509,6 +510,53 @@ def web_booking():
         return redirect('/')
 
     return render_template('booking.html', form=form)
+
+@app.route('/web/add_room', methods=['POST', 'GET'])
+def web_room():
+    if 'user_id' not in session:
+        flash('Войдите, чтобы добавить комнату', 'warning')
+        return redirect('/web/login')
+
+    form = RoomForm()
+    if form.validate_on_submit():
+        equipment_list = []
+        if form.equipment.data:
+            equipment_list = [e.strip() for e in form.equipment.data.split(',') if e.strip()]
+
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.id == session['user_id']).first()
+        if not user:
+            db_sess.close()
+            flash('Пользователь не найден', 'danger')
+            return render_template('add_room.html', form=form, current_user=user)
+
+        rooms = db_sess.query(Rooms).filter(Rooms.title == form.title.data).all()
+        if len(rooms) > 0:
+            db_sess.close()
+            flash('Комната с таким названием уже есть', 'danger')
+            return render_template('add_room.html', form=form, current_user=user)
+
+        room = Rooms()
+        room.title = form.title.data
+        room.capacity = form.capacity.data
+        room.equipment = equipment_list
+        room.user_id = user.id
+
+        db_sess.add(room)
+        db_sess.commit()
+
+        flash(f'Комната {room.title} успешно добавлена', 'success')
+        db_sess.close()
+        return redirect('/')
+
+    user = None
+    if 'user_id' in session:
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.id == session['user_id']).first()
+        db_sess.close()
+    return render_template('add_room.html', form=form, current_user=user)
+
+
 
 def main():
     db_session.global_init("db/Rental.db")
