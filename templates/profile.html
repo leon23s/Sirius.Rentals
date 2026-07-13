@@ -1,10 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
+{% extends "base.html" %}
 
-</body>
-</html>
+{% block content %}
+<h2>Ваш профиль</h2>
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">{{ user.name }}</h5>
+        <p class="card-text"><strong>Email:</strong> {{ user.email }}</p>
+        <p class="card-text"><strong>Зарегистрирован:</strong> {{ user.created_date.strftime('%d.%m.%Y %H:%M') }}</p>
+    </div>
+</div>
+
+<h3>Активные бронирования</h3>
+{% if bookings %}
+    <div class="list-group">
+        {% for booking in bookings %}
+        <div class="list-group-item">
+            <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">Комната: {{ booking.room.title }}</h5>
+                <small>Статус: {{ booking.status }}</small>
+            </div>
+            <p class="mb-1">
+                <strong>С:</strong> {{ booking.date_start.strftime('%d.%m.%Y %H:%M') }}<br>
+                <strong>До:</strong> {{ booking.date_end.strftime('%d.%m.%Y %H:%M') }}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">У вас нет активных бронирований.</div>
+{% endif %}
+{% endblock %}

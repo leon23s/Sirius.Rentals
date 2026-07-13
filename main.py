@@ -557,6 +557,25 @@ def web_room():
     return render_template('add_room.html', form=form, current_user=user)
 
 
+@app.route('/profile')
+def profile():
+    if 'user_id' not in session:
+        flash('Войдите, чтобы просмотреть профиль', 'warning')
+        return redirect('/web/login')
+
+    db_sess = db_session.create_session()
+    user = db_sess.query(User).filter(User.id == session['user_id']).first()
+    if not user:
+        db_sess.close()
+        flash('Пользователь не найден', 'danger')
+        return redirect('/')
+
+    bookings = db_sess.query(Bookings).filter(Bookings.user_id == user.id, Bookings.status == 'active').all()
+    db_sess.close()
+
+    return render_template('profile.html', user=user, bookings=bookings)
+
+
 
 def main():
     db_session.global_init("db/Rental.db")
