@@ -1,9 +1,10 @@
-import flask
-from flask import Flask, jsonify, request, render_template, redirect
+from flask import Flask, jsonify, request, render_template, redirect, flash, session
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from data import db_session
 from datetime import datetime, timedelta
 
+from data.booking_form import BookingForm
+from data.login_form import LoginForm
 from data.register_form import RegisterForm
 from data.rooms import Rooms
 from data.users import User
@@ -391,11 +392,11 @@ def web_register():
         db_sess = db_session.create_session()
         try:
             if db_sess.query(User).filter(User.email == form.email.data).first():
-                flask.flash('Пользователь с такой почтой уже существует', 'danger')
+                flash('Пользователь с такой почтой уже существует', 'danger')
                 return render_template('register.html', form=form, message_flashed=True)
 
             if form.password.data != form.password_again.data:
-                flask.flash('Пароли не совпадают', 'danger')
+                flash('Пароли не совпадают', 'danger')
                 return render_template('register.html', form=form, message_flashed=True)
 
             user = User(
@@ -407,11 +408,45 @@ def web_register():
             db_sess.add(user)
             db_sess.commit()
 
-            flask.flash('Регистрация прошла успешно', 'success')
+            flash('Регистрация прошла успешно', 'success')
             return redirect('/web/login')
         finally:
             db_sess.close()
     return render_template('register.html', form=form, message_flashed=True)
+
+@app.route('/web/login', methods=['POST', 'GET'])
+def web_login():
+    form = LoginForm()
+
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.email == form.email.data).first()
+        db_sess.close()
+
+        if user and user.check_password(form.password.data):
+            session['user_id'] = user.id
+            flash('Успешный вход', 'success')
+            return redirect('/')
+        flash('Неверный email или пароль', 'danger')
+
+    return render_template('login.html', form=form)
+
+@app.route('/web/logout', methods=['POST', 'GET'])
+def web_logout():
+    session.pop('user_id')
+    flash('Вы вышли', 'success')
+    return redirect('/')
+
+@app.route('/web/booking', methods=['POST', 'GET'])
+def web_booking():
+    if 'user_id' not in session:
+        flash('Войдите, чтобы забронировать помещение', 'warning')
+        return redirect('/web/login')
+
+    form = BookingForm()
+    pass
+
+    return render_template('booking.html')
 
 
 def main():

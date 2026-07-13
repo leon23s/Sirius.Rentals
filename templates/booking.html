@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Бронирование</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.room_id.label }}<br>
+        {{ form.room_id() }}
+    </div>
+    <div>
+        {{ form.date_start.label }}<br>
+        {{ form.date_start() }}
+    </div>
+    <div>
+        {{ form.date_end.label }}<br>
+        {{ form.date_end() }}
+    </div>
+    <div>
+        {{ form.submit() }}
+    </div>
+</form>
+{% endblock %}
