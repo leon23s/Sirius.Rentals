@@ -19,71 +19,72 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 jwt = JWTManager(app)
 
 
-@app.route('/rooms', methods=['POST', 'GET'])
+@app.route('/rooms', methods=['POST'])
 @jwt_required()
 def rooms():
     db_sess = db_session.create_session()
-    if request.method == 'POST':
-        data = request.get_json()
-        if not data:
-            db_sess.close()
-            return jsonify({'msg': 'отсутствуют данные'}), 400
-
-        for f in ['title', 'capacity', 'equipment']:
-            if f not in data:
-                db_sess.close()
-                return jsonify({'msg': f'отсутствует поле {f}'}), 400
-
-        if not isinstance(data['capacity'], int) or data['capacity'] <= 0:
-            db_sess.close()
-            return jsonify({'msg': 'указанная вместимость некорректна'}), 400
-
-        if not isinstance(data['equipment'], list):
-            db_sess.close()
-            return jsonify({'msg': 'указанное оборудование некорректно'}), 400
-
-        if data['title'].strip() == '':
-            db_sess.close()
-            return jsonify({'msg': 'отсутствует название'}), 400
-
-        room = Rooms()
-        room.title = data['title']
-        room.capacity = data['capacity']
-        room.equipment = data['equipment']
-        room.user_id = get_jwt_identity()
-
-        db_sess.add(room)
-        db_sess.commit()
+    data = request.get_json()
+    if not data:
         db_sess.close()
+        return jsonify({'msg': 'отсутствуют данные'}), 400
 
-        return jsonify({'msg': 'комната успешно добавлена'}), 201
+    for f in ['title', 'capacity', 'equipment']:
+        if f not in data:
+            db_sess.close()
+            return jsonify({'msg': f'отсутствует поле {f}'}), 400
 
-    if request.method == 'GET':
-        rooms_l = db_sess.query(Rooms).all()
-        capacity = request.args.get('capacity')
-        if capacity:
-            try:
-                min_cap = int(capacity)
-                rooms_l = [r for r in rooms_l if r.capacity >= min_cap]
-            except Exception:
-                db_sess.close()
-                return jsonify({'msg': 'неверный формат. правильный формат: ?capacity={int}'}), 400
-
-        equipment = request.args.get('equipment')
-        if equipment:
-            required = [e.strip() for e in equipment.split(',') if e.strip()]
-            if required:
-                rooms_l = [r for r in rooms_l if any(eq in r.equipment for eq in required)]
-
-        result = [{
-            'id': r.id,
-            'title': r.title,
-            'capacity': r.capacity,
-            'equipment': r.equipment,
-            'user_id': r.user_id
-        } for r in rooms_l]
+    if not isinstance(data['capacity'], int) or data['capacity'] <= 0:
         db_sess.close()
-        return jsonify(result), 200
+        return jsonify({'msg': 'указанная вместимость некорректна'}), 400
+
+    if not isinstance(data['equipment'], list):
+        db_sess.close()
+        return jsonify({'msg': 'указанное оборудование некорректно'}), 400
+
+    if data['title'].strip() == '':
+        db_sess.close()
+        return jsonify({'msg': 'отсутствует название'}), 400
+
+    room = Rooms()
+    room.title = data['title']
+    room.capacity = data['capacity']
+    room.equipment = data['equipment']
+    room.user_id = get_jwt_identity()
+
+    db_sess.add(room)
+    db_sess.commit()
+    db_sess.close()
+
+    return jsonify({'msg': 'комната успешно добавлена'}), 201
+
+@app.route('/rooms', methods=['GET'])
+def get_rooms():
+    db_sess = db_session.create_session()
+    rooms_l = db_sess.query(Rooms).all()
+    capacity = request.args.get('capacity')
+    if capacity:
+        try:
+            min_cap = int(capacity)
+            rooms_l = [r for r in rooms_l if r.capacity >= min_cap]
+        except Exception:
+            db_sess.close()
+            return jsonify({'msg': 'неверный формат. правильный формат: ?capacity={int}'}), 400
+
+    equipment = request.args.get('equipment')
+    if equipment:
+        required = [e.strip() for e in equipment.split(',') if e.strip()]
+        if required:
+            rooms_l = [r for r in rooms_l if any(eq in r.equipment for eq in required)]
+
+    result = [{
+        'id': r.id,
+        'title': r.title,
+        'capacity': r.capacity,
+        'equipment': r.equipment,
+        'user_id': r.user_id
+    } for r in rooms_l]
+    db_sess.close()
+    return jsonify(result), 200
 
 @app.route('/rooms/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 @jwt_required()
