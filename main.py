@@ -494,6 +494,8 @@ def web_booking():
                     flash('Комната уже занята в это время', 'danger')
                     return render_template('booking.html', form=form)
 
+        room_title = room.title
+
         booking = Bookings()
         booking.room = room
         booking.user = user
@@ -506,7 +508,7 @@ def web_booking():
         db_sess.commit()
         db_sess.close()
 
-        flash(f'Комната {room.title} успешно забронирована', 'success')
+        flash(f'Комната {room_title} успешно забронирована', 'success')
         return redirect('/')
 
     return render_template('booking.html', form=form)
