@@ -382,8 +382,17 @@ def login():
 
 @app.route('/', methods=['GET'])
 def index():
+    db_sess = db_session.create_session()
+    rooms = db_sess.query(Rooms).all()
+    db_sess.close()
 
-    return render_template('index.html')
+    user = None
+    if 'user_id' in session:
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.id == session['user_id']).first()
+        db_sess.close()
+
+    return render_template('index.html', rooms=rooms, current_user=user)
 
 @app.route('/web/register', methods=['POST', 'GET'])
 def web_register():

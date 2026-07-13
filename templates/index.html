@@ -1,7 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-
-Index
-
+<h2>Список комнат</h2>
+{% if rooms %}
+    <ul>
+    {% for room in rooms %}
+        <li>
+            <strong>{{ room.title }}</strong>
+            (вместимость: {{ room.capacity }},
+            оборудование: {{ room.equipment|join(', ') }})
+        </li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>Нет доступных комнат.</p>
+{% endif %}
 {% endblock %}
