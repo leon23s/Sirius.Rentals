@@ -589,7 +589,7 @@ def profile():
 
 def main():
     db_session.global_init("db/Rental.db")
-    app.run()
+    app.run(host='0.0.0.0', port=5000)
 
 
 if __name__ == '__main__':
