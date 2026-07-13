@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: sirius-rentals
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./db:/main/db
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=Sirius-Rentals-Key
+      - JWT_SECRET_KEY=Sirius-Rentals-JWT-Key
+    restart: unless-stopped
